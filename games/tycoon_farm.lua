@@ -39,6 +39,7 @@ local CFG = {
     PLOT            = "8",
     INF_VALUE       = 1e21,        -- Remotes.changerValue:FireServer(INF_VALUE)
     INF_INTERVAL    = 1.0,
+    REBIRTH_INTERVAL = 2.0,        -- seconds between BuyRebirth calls
     -- fallback when changerValue is missing
     COLLECT_POS     = Vector3.new(-1611.95, 1.9511, 271.025),
     INF_AMOUNT      = 999999999,
@@ -48,6 +49,8 @@ local CFG = {
     TOUCH_WAIT      = 0.45,        -- seconds after the untouch before checking the pad is gone
     RETRY_AFTER     = 6.0,         -- a pad that survived a touch waits this long
     MAX_FAILS       = 3,           -- ... and is skipped for good after this many touches
+    PROFILE_MS      = 6,           -- a step part slower than this is printed as "slow ..." (0 = off)
+    SWEEP_BATCH     = 6,           -- pads whose transparency is re-read per frame
     SCAN_BUY        = 1.0,         -- seconds between pad refreshes while Auto Buy is on
     SCAN_ESP        = 1.5,         -- ... while only the ESP is on
     -- esp
@@ -57,7 +60,7 @@ local CFG = {
     UI_X            = 20,
     UI_Y            = 240,
     UI_W            = 200,
-    KEYS            = { ui = "F1", buy = "F3", inf = "F4", esp = "F6", dump = "F7" },
+    KEYS            = { ui = "F1", buy = "F3", inf = "F4", rebirth = "F5", esp = "F6", dump = "F7" },
     -- cursor position is in screen pixels; shift it if the overlay is offset (windowed Roblox)
     MOUSE_DX        = 0,
     MOUSE_DY        = 0,
@@ -180,12 +183,6 @@ local function find_price(inst)
     return nil
 end
 
-local function my_position()
-    local x, y, z = GetLocalPlayerPosition()
-    if not x or (x == 0 and y == 0 and z == 0) then return nil end
-    return Vector3.new(x, y, z)
-end
-
 -- the part that does the touching: your character's HumanoidRootPart
 local function my_root()
     local lp = prop(game:GetService("Players"), "LocalPlayer")
@@ -193,11 +190,19 @@ local function my_root()
     return char and child(char, "HumanoidRootPart")
 end
 
+-- GetLocalPlayerPosition is no longer a global in this Calamity: read the root part's Position
+local function my_position()
+    local root = my_root()
+    local p = root and prop(root, "Position")
+    if not p or (p.X == 0 and p.Y == 0 and p.Z == 0) then return nil end
+    return p
+end
+
 -- ---------------------------------------------------------------------------
 -- state
 -- ---------------------------------------------------------------------------
 
-local S = { running = true, visible = true, buy = true, inf = false, esp = true }   -- test copy: Auto Buy on at start
+local S = { running = true, visible = true, buy = true, inf = false, rebirth = false, esp = true }   -- test copy: Auto Buy on at start
 
 local Players = game:GetService("Players")
 
@@ -208,6 +213,7 @@ local W = {                       -- the world: plot, pads, remotes
     me = nil, me_t = -99,
 }
 
+local R = { next = 0, sent = 0, left = nil }     -- auto rebirth
 local F = { next = 0, sent = 0, status = "idle", ok = true }
 local B = { state = "idle", cur = nil, root = nil, t = 0, nxt = 0, bought = 0,
             retry = {}, fails = {}, skipped = 0, msg = "off" }
@@ -249,9 +255,22 @@ local function find_plot()
     return nil, "no plot found"
 end
 
+-- Lag hunting: the parts of a step are timed, and one that takes longer than PROFILE_MS is printed
+-- (at most twice a second per part), so a hitch can be pinned on a part instead of guessed at.
+local PROF_LAST = {}
+local function prof(label, t0)
+    if CFG.PROFILE_MS <= 0 then return end
+    local ms = (tick() - t0) * 1000
+    if ms > CFG.PROFILE_MS and tick() - (PROF_LAST[label] or -99) > 0.5 then
+        PROF_LAST[label] = tick()
+        print(string.format("[tycoon] slow %s: %.0f ms", label, ms))
+    end
+end
+
 local REMOTE_PATHS = {
     collect = { "DropperEvents", "CollectDrop" },
     inf     = { "Remotes", "changerValue" },
+    rebirth = { "RemoteEvents", "BuyRebirth" },
 }
 
 local function get_remote(now, key)
@@ -334,19 +353,31 @@ local function scan_buttons(now)
         W.buttons = list
     end
 
-    -- Locked pads are usually in the tree but hidden. When the pads split into visible and
-    -- hidden groups, only the visible ones are open; when they all look alike there is
-    -- nothing to tell them apart by, so every pad counts as open.
-    local list, low, high = W.buttons, false, false
-    for i = 1, #list do
+    -- the transparencies are re-read a few pads per frame (sweep_step), not all in this call
+    W.sweep = { i = 1, low = false, high = false }
+end
+
+-- Locked pads are usually in the tree but hidden. When the pads split into visible and
+-- hidden groups, only the visible ones are open; when they all look alike there is
+-- nothing to tell them apart by, so every pad counts as open.
+-- Reading every pad's parts in one go was a visible hitch, so a sweep does SWEEP_BATCH pads a frame.
+local function sweep_step()
+    local sw = W.sweep
+    if not sw then return end
+    local list = W.buttons
+    local last = math.min(#list, sw.i + CFG.SWEEP_BATCH - 1)
+    for i = sw.i, last do
         local e = list[i]
         local tr = min_transparency(e.parts)
         e.tr = tr
         if tr then
-            if tr < CFG.OPEN_BELOW then low = true else high = true end
+            if tr < CFG.OPEN_BELOW then sw.low = true else sw.high = true end
         end
     end
-    W.filter = low and high
+    sw.i = last + 1
+    if sw.i <= #list then return end
+    W.sweep = nil
+    W.filter = sw.low and sw.high
     local open_list = {}
     for i = 1, #list do
         local e = list[i]
@@ -375,6 +406,7 @@ local dump
 local TOGGLES = {
     { key = "buy", name = "Auto Buy",       hot = CFG.KEYS.buy },
     { key = "inf", name = "Infinite Money", hot = CFG.KEYS.inf },
+    { key = "rebirth", name = "Auto Rebirth", hot = CFG.KEYS.rebirth },
     { key = "esp", name = "Button ESP",     hot = CFG.KEYS.esp },
 }
 local rows = {}          -- key -> the window's toggle row
@@ -404,9 +436,11 @@ local function build_panel()
     local info = tab:Section("Status", "Right")
     info:Label(function() return "Open pads: " .. W.open end)
     info:Label(function() return "Bought: " .. B.bought end)
-    info:Label(function() return "Buy: " .. tostring(B.msg) end)
-    info:Label(function() return "Money: " .. tostring(F.status) end)
-    info:Button("Dump to console", function() dump() end)
+    info:Label(function()
+        if not S.rebirth then return "Rebirth calls: " .. R.sent end
+        if R.left and R.left > 0 then return "Rebirth: " .. R.left .. " buttons left" end
+        return "Rebirth calls: " .. R.sent
+    end)
     win:AddSettingsTab("cog")
 end
 
@@ -417,23 +451,31 @@ end
 local esp = {}
 local have_w2s = draw and type(draw.WorldToScreen) == "function"
 local w2s = have_w2s and draw.WorldToScreen
-local TAG_CHAR, TAG_H, LABEL_EVERY = 7.6, 18, 0.25
+local TAG_CHAR, TAG_H, LABEL_EVERY, TAG_GAP = 7.2, 20, 0.25, 7
 
+-- One marker per pad: a soft halo, a crisp ring, a centre dot, and a tag above the ring (a dark
+-- pill with a coloured edge). Drawing objects are made ahead of time, a couple per frame, so a pad
+-- appearing never has to create six of them in one frame.
 local function esp_slot(i)
     local s = esp[i]
     if not s then
         s = {
+            halo = Drawing.new("Circle"),
             ring = Drawing.new("Circle"),
+            dot  = Drawing.new("Circle"),
             bg   = Drawing.new("Square"),
             bar  = Drawing.new("Square"),
             t    = Drawing.new("Text"),
             visible = false, label_t = -99, label = "", tw = 0,
         }
+        s.halo.NumSides, s.halo.Filled, s.halo.Thickness, s.halo.Transparency, s.halo.ZIndex = 32, false, 5, 0.22, 5
         s.ring.NumSides, s.ring.Filled, s.ring.Thickness, s.ring.Transparency, s.ring.ZIndex = 32, false, 2, 1, 6
-        s.bg.Filled, s.bg.Color, s.bg.Transparency, s.bg.ZIndex = true, COL.bg, 0.8, 6
-        s.bar.Filled, s.bar.Transparency, s.bar.ZIndex = true, 1, 7
-        s.t.Outline, s.t.Color, s.t.ZIndex = true, COL.text, 8
-        s.ring.Visible, s.bg.Visible, s.bar.Visible, s.t.Visible = false, false, false, false
+        s.dot.NumSides, s.dot.Filled, s.dot.Radius, s.dot.Transparency, s.dot.ZIndex = 12, true, 3, 1, 6
+        s.bg.Filled, s.bg.Color, s.bg.Transparency, s.bg.ZIndex = true, COL.bg, 0.82, 7
+        s.bar.Filled, s.bar.Transparency, s.bar.ZIndex = true, 1, 8
+        s.bar.Size = Vector2.new(3, TAG_H)
+        s.t.Outline, s.t.Color, s.t.ZIndex, s.t.Size = false, COL.text, 9, 13
+        s.halo.Visible, s.ring.Visible, s.dot.Visible, s.bg.Visible, s.bar.Visible, s.t.Visible = false, false, false, false, false, false
         esp[i] = s
     end
     return s
@@ -442,7 +484,7 @@ end
 local function esp_show(s, v)
     if s.visible == v then return end
     s.visible = v
-    s.ring.Visible, s.bg.Visible, s.bar.Visible, s.t.Visible = v, v, v, v
+    s.halo.Visible, s.ring.Visible, s.dot.Visible, s.bg.Visible, s.bar.Visible, s.t.Visible = v, v, v, v, v, v
 end
 
 local function pad_color(e)
@@ -468,16 +510,20 @@ local function update_esp(now)
                     shown = shown + 1
                     local s = esp_slot(shown)
 
-                    -- ring radius: the pad's world radius, measured in screen pixels
-                    local r = 8
-                    local rx, ry = w2s(e.edge)
-                    if rx then r = math.sqrt((rx - x) ^ 2 + (ry - y) ^ 2) end
-                    if r < 5 then r = 5 elseif r > 90 then r = 90 end
+                    -- ring radius: the pad's world radius, measured in screen pixels. The second
+                    -- projection is only worth it every few frames: the radius barely moves.
+                    local r = s.r or 8
+                    if s.e ~= e or now - (s.r_t or -99) >= 0.1 then
+                        s.r_t = now
+                        local rx, ry = w2s(e.edge)
+                        if rx then r = math.sqrt((rx - x) ^ 2 + (ry - y) ^ 2) end
+                        if r < 5 then r = 5 elseif r > 90 then r = 90 end
+                    end
 
                     local col = pad_color(e)
                     if s.col ~= col then
                         s.col = col
-                        s.ring.Color, s.bar.Color = col, col
+                        s.ring.Color, s.halo.Color, s.dot.Color, s.bar.Color = col, col, col, col
                     end
 
                     -- the label (and so the tag width) changes a few times a second, not every frame
@@ -485,32 +531,34 @@ local function update_esp(now)
                     if now - s.label_t >= LABEL_EVERY or s.e ~= e then
                         s.label_t, s.e = now, e
                         local label = tonumber(e.name) and ("#" .. e.name) or clip(e.name, 14)
-                        if e.price then label = label .. "  $" .. short(e.price) end
+                        if e.price then label = label .. "   $" .. short(e.price) end
                         if me then
                             local dx, dy, dz = e.pos.X - me.X, e.pos.Y - me.Y, e.pos.Z - me.Z
-                            label = label .. "  " .. math.floor(math.sqrt(dx * dx + dy * dy + dz * dz) + 0.5) .. "m"
+                            label = label .. "   " .. math.floor(math.sqrt(dx * dx + dy * dy + dz * dz) + 0.5) .. "m"
                         end
                         if label ~= s.label then
                             s.label = label
                             s.t.Text = label
-                            s.tw = #label * TAG_CHAR + 16
+                            s.tw = #label * TAG_CHAR + 18
                             s.bg.Size = Vector2.new(s.tw, TAG_H)
                             relabel = true
                         end
                     end
 
-                    if relabel or s.x ~= x or s.y ~= y then
+                    local rchanged = not s.r or math.abs(s.r - r) >= 0.5
+                    if rchanged then
+                        s.r = r
+                        s.ring.Radius, s.halo.Radius = r, r + 3
+                    end
+                    if relabel or rchanged or s.x ~= x or s.y ~= y then
                         s.x, s.y = x, y
-                        s.ring.Position = Vector2.new(x, y)
-                        local tx, ty = x - s.tw * 0.5, y - TAG_H * 0.5
+                        local c = Vector2.new(x, y)
+                        s.ring.Position, s.halo.Position, s.dot.Position = c, c, c
+                        local tx, ty = x - s.tw * 0.5, y - s.r - TAG_H - TAG_GAP
+                        if ty < 2 then ty = y + s.r + TAG_GAP end      -- no room above: below the ring
                         s.bg.Position = Vector2.new(tx, ty)
                         s.bar.Position = Vector2.new(tx, ty)
-                        s.t.Position = Vector2.new(tx + 9, ty + 2)
-                    end
-                    if s.bar_h ~= TAG_H then s.bar_h = TAG_H; s.bar.Size = Vector2.new(3, TAG_H) end
-                    if s.r ~= r and (not s.r or math.abs(s.r - r) >= 0.5) then
-                        s.r = r
-                        s.ring.Radius = r
+                        s.t.Position = Vector2.new(tx + 10, ty + 3)
                     end
                     esp_show(s, true)
                 end
@@ -555,6 +603,25 @@ local function money_step(now)
             F.status = e
         end
         F.next = now + 1
+    end
+end
+
+-- BuyRebirth takes no arguments: fired every REBIRTH_INTERVAL while it is on, but only once
+-- every button on the plot is bought
+local function rebirth_step(now)
+    if not S.rebirth or now < R.next then return end
+    -- the game only rebirths once every button is bought: the plot's Buttons folder is empty
+    if not W.plot then R.left, R.next = nil, now + 1; return end
+    local left = #children(child(W.plot, "Buttons"))
+    R.left = left
+    if left > 0 then R.next = now + 1; return end
+    local remote = get_remote(now, "rebirth")
+    if not remote then R.next = now + 1; return end
+    if pcall(call, remote, "FireServer") then
+        R.sent = R.sent + 1
+        R.next = now + CFG.REBIRTH_INTERVAL
+    else
+        R.next = now + 1
     end
 end
 
@@ -619,27 +686,38 @@ local function buy_step(now)
         if not cand.part then failed(cand); return end
         -- only an explicit false is a failure: Calamity's pcall can hand back nil for a C function that
         -- returned nothing
-        local ok, err = pcall(firetouchinterest, root, cand.part, 0)
-        if ok == false then
-            print("[tycoon] touch failed on " .. clip(cand.name, 22) .. ": " .. tostring(err))
-            failed(cand)
-            return
-        end
+        -- the touch is its own thread: the engine call can wait on the game, and the step (and with
+        -- it the ESP) must not wait with it
         B.cur, B.root, B.state, B.t = cand, root, "touching", now
         B.msg = "touching " .. clip(cand.name, 22)
+        spawn(function()
+            local t0 = tick()
+            local ok, err = pcall(firetouchinterest, root, cand.part, 0)
+            prof("touch begin", t0)
+            if ok == false then
+                print("[tycoon] touch failed on " .. clip(cand.name, 22) .. ": " .. tostring(err))
+                B.fails[cand.name] = (B.fails[cand.name] or 0) + 1
+                B.retry[cand.name] = tick() + CFG.RETRY_AFTER
+                B.cur, B.state, B.nxt = nil, "idle", tick() + 0.1
+                return
+            end
+            wait(CFG.TOUCH_HOLD)
+            t0 = tick()
+            pcall(firetouchinterest, root, cand.part, 1)
+            prof("touch end", t0)
+            B.state, B.t = "settle", tick()
+        end)
 
-    elseif B.state == "touching" then
-        if now - B.t < CFG.TOUCH_HOLD then return end
-        pcall(firetouchinterest, B.root, B.cur.part, 1)
-        B.state, B.t = "settle", now
+    elseif B.state == "touching" and now - B.t > 3 then
+        B.cur, B.state = nil, "idle"       -- the touch thread died
 
     elseif B.state == "settle" then
+        if not B.cur then B.state = "idle"; return end      -- switched off mid-touch
         if now - B.t < CFG.TOUCH_WAIT then return end
-        scan_buttons(now)
-        local e, gone = B.cur, true
-        for _, b in ipairs(W.buttons) do
-            if b.name == e.name then gone = false; break end
-        end
+        -- is the pad still there? one lookup by name, not a rescan of the whole folder
+        local e = B.cur
+        local gone = child(child(W.plot, "Buttons"), e.name) == nil
+        W.scan_t = -99      -- the pad list is refreshed on its timer next
         if gone then
             B.bought = B.bought + 1
             B.fails[e.name], B.retry[e.name] = nil, nil
@@ -686,6 +764,7 @@ function dump()
     end
     out("queued so far", F.sent, "  fire status:", F.status)
     scan_buttons(now)
+    while W.sweep do sweep_step() end      -- the dump wants the finished list
     out(string.format("pads %d, open %d, filter by transparency: %s", #W.buttons, W.open, tostring(W.filter)))
     for i, e in ipairs(W.buttons) do
         local kids = {}
@@ -732,7 +811,7 @@ local function step()
     keys_step()
 
     -- the world is only read while something uses it
-    local need = S.buy or (S.esp and S.visible)
+    local need = S.buy or S.rebirth or (S.esp and S.visible)
     if need then
         if W.plot == nil and now - W.plot_t >= 3 or W.plot ~= nil and now - W.plot_t >= 10 then
             W.plot_t = now
@@ -743,13 +822,27 @@ local function step()
             W.plot, W.plot_why = p, why
         end
         if W.plot and B.state == "idle" and now - W.scan_t >= (S.buy and CFG.SCAN_BUY or CFG.SCAN_ESP) then
+            local t0 = tick()
             scan_buttons(now)
+            prof("scan", t0)
         end
+        local t0 = tick()
+        sweep_step()
+        prof("sweep", t0)
     end
 
+    local t0 = tick()
     money_step(now)
+    prof("money", t0)
+    t0 = tick()
+    rebirth_step(now)
+    prof("rebirth", t0)
+    t0 = tick()
     buy_step(now)
+    prof("buy", t0)
+    t0 = tick()
     update_esp(now)
+    prof("esp", t0)
 
     -- the panel is only toggles, so what the script is doing goes to the console, once per change
     if S.inf and F.status ~= P.said_money then P.said_money = F.status; print("[tycoon] money: " .. F.status) end
@@ -760,17 +853,25 @@ local function stop()
     S.running = false
     pcall(function() Lib:Destroy() end)
     for _, s in ipairs(esp) do
-        for _, d in ipairs({ s.ring, s.bg, s.bar, s.t }) do pcall(call, d, "Remove") end
+        for _, d in ipairs({ s.halo, s.ring, s.dot, s.bg, s.bar, s.t }) do pcall(call, d, "Remove") end
     end
     esp = {}
 end
 _G.__tycoon_farm = { stop = stop, state = S, cfg = CFG, dump = dump }
 
 build_panel()
+spawn(function()                  -- the ESP's drawings, a couple per frame
+    for i = 1, CFG.ESP_MAX do
+        if not S.running then return end
+        pcall(esp_slot, i)
+        if i % 2 == 0 then wait(0) end
+    end
+end)
 
 spawn(function()
     while S.running do
         local ok, err = pcall(step)
+        if ok then P.errors = 0 end      -- only errors in a row count
         if not ok then
             P.errors = P.errors + 1
             if tostring(err) ~= P.last_err then
