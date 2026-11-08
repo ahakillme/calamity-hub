@@ -42,7 +42,6 @@ local CFG = {
     AFTER_CATCH   = 2.0,      -- seconds between a catch and the next cast
     MOUSE_DX      = 0,        -- shift every click (windowed Roblox: the window's client origin)
     MOUSE_DY      = 0,
-    SCREEN        = { 2560, 1440 },   -- used when the camera's viewport cannot be read
 }
 
 local SCRIPT = "[fisch]"
@@ -94,7 +93,7 @@ local function viewport()
     local cam = prop(workspace, "CurrentCamera")
     local v = cam and prop(cam, "ViewportSize")
     if v and v.X and v.X > 100 then return v.X, v.Y end
-    return CFG.SCREEN[1], CFG.SCREEN[2]
+    return nil, nil      -- unreadable: callers do nothing rather than guess a resolution
 end
 
 local function readf(a)
@@ -108,6 +107,7 @@ end
 local function on_screen(x, y, w, h)
     if not (x and y and w and h) then return false end
     local vw, vh = viewport()
+    if not vw then return false end
     return x >= -64 and y >= -128 and x <= vw + 64 and y <= vh + 64 and
            w >= 6 and h >= 6 and w <= vw * 1.2 and h <= vh * 1.2
 end
@@ -197,6 +197,7 @@ end
 -- where casts and reel holds are clicked: the middle of the screen, a bit above it
 local function rest_point()
     local vw, vh = viewport()
+    if not vw then return nil, nil end
     return vw * 0.5, vh * 0.42
 end
 
@@ -292,6 +293,7 @@ local function cast()
     S.casts = S.casts + 1
     hold(false)
     local x, y = rest_point()
+    if not x then say("cast", "screen size unreadable - not casting"); return false end
     move(x, y)
     task.wait(0.05)
     mouse1press()
@@ -444,7 +446,7 @@ local function reel(ui, now)
         return
     end
     say("bar", "playing the reel bar")
-    if not held then local x, y = rest_point(); move(x, y) end
+    if not held then local x, y = rest_point(); if x then move(x, y) end end
 
     -- The player's bar has momentum: holding speeds it up to the right, letting go to the left,
     -- and it keeps going for a while either way - steering by where it is now overshot every
@@ -708,6 +710,184 @@ local LOCATIONS = {
     } },
 }
 
+-- More places, from Shoobie-code/fisch's lists: zones and hubs, points of interest, rods with a fixed spot
+table.insert(LOCATIONS, { name = "Hub: Locations", list = {
+        { "Above The Clouds", 1489.51, 2601.67, -1718.3 },
+        { "Abyssal Zenith", -13541, -11048, 154 },
+        { "Ancient Archives", -3162.13, -747.21, 1701.17 },
+        { "Ancient Isle", 6069, 224, 262 },
+        { "Apollo's Song of Light", -8707.94, -2904.53, 731.84 },
+        { "Astral Observatory", 842.98, -2603.62, 1619.96 },
+        { "Atlantean Storm", -3866, 154, 445 },
+        { "Atlantis", -4343.68, -602.31, 1813.18 },
+        { "Bellona's Frenzy of War", -8667.92, -2361.67, 757.59 },
+        { "Blue Moon - First Sea", 2685.14, 141.51, 2582.13 },
+        { "Boreal Hollow", 848.32, -2603.62, 1610.78 },
+        { "Boreal Pines", 21575.6, 141.52, 4137.94 },
+        { "Brine Pool", -1795, -142, -3331 },
+        { "Calm Zone", -4336, -11174, 3704 },
+        { "Carrot Garden", 3732, -1127, -1080 },
+        { "Castaway Cliff", 384.89, 207.49, -1818.55 },
+        { "Challenger's Deep", -775, -3283, -675 },
+        { "Collapsed Ruins", 3136, -1102, 1611 },
+        { "Coral Bastion", 2544, -1098, 849 },
+        { "Crimson Cavern", -1035, -360, -4800 },
+        { "Crowned Ruins", 3126, -1126, 2039 },
+        { "Cryogenic Canal", 19956.8, 635.28, 5717.43 },
+        { "Crystal Cove", 1364, -612, 2472 },
+        { "Cultist Lair", 4476, -1997, -4676 },
+        { "Cursed Isle", 1860, 135, 1210 },
+        { "Desolate Deep", -1512.57, -234.7, -2862.52 },
+        { "Drylands", -6455.02, 204.97, -1539.97 },
+        { "Enchanted Crevice", 681.17, -754.03, -472.44 },
+        { "Ethereal Abyss", -3792.98, -564.27, 1828.82 },
+        { "Everturn Forest", 2426.63, 149.82, -2500.87 },
+        { "Forsaken Shores", -2584.73, 167.55, 1608.71 },
+        { "Frigid Cavern", 19845.5, 440.16, 5633.05 },
+        { "Glacial Grotto (Cave)", 20008, 1035.2, 5699.71 },
+        { "Glacial Grotto (Summit)", 19990.9, 1142.24, 5550.1 },
+        { "Gloomy Crevice", 134.63, -2512.3, -11836.6 },
+        { "Grand Reef", -3577.17, 162.33, 503.51 },
+        { "Hades' Underworld of Indefinite", -8649, -4243, 434 },
+        { "Keepers Altar", 1296, -805, -296 },
+        { "Kraken Lair", -4380.05, -996.26, 2052.43 },
+        { "Living Garden", -2401, -316, -2771 },
+        { "Lost Jungle", -2707.33, 158.2, -2060.92 },
+        { "Lower Deep", 1708.02, -2805.78, -11772.1 },
+        { "Luminescent Cavern", -1013, -313, -4038 },
+        { "Mineshaft", -684, -864, -74 },
+        { "Moosewood", 486.56, 157.84, 268.3 },
+        { "Mushgrove", 2697.28, 140.33, -756.55 },
+        { "Nectar Den", -2066, -327, -3125 },
+        { "Northern Expedition", 19512.7, 132.67, 5303.36 },
+        { "Obsidian Pocket", 141.56, -6551, 48.81 },
+        { "Olympian Fissure", -8830, -4243, -147 },
+        { "Outer Deep", -436.9, -2367.8, -12685.3 },
+        { "Overgrowth Caves", 20269.8, 273.2, 5557.13 },
+        { "Poseidon's Storm of Floods", -8985.58, -3191.38, 780.49 },
+        { "Poseidons Temple", -3950, -550, 968 },
+        { "Roslit Bay", -1486.62, 142.08, 704.4 },
+        { "Roslit Volcano", -1893, 173, 314 },
+        { "Scoria Reach", -5108.09, 145.09, -1456.06 },
+        { "Skycrest", 2779.58, 1621.31, 830.14 },
+        { "Snowburrow", 2784, 141, 2557 },
+        { "Snowcap Island", 2687.71, 160.31, 2385.95 },
+        { "Sunken Depths", -4938.35, -595.12, 1840.24 },
+        { "Sunken Reliquary", 2950, -1102, 443 },
+        { "Sunstone Island", -986.11, 208.64, -1074.15 },
+        { "Terrapin", -132.3, 188.15, 1952.43 },
+        { "The Deep", 385.44, -2238.58, -11910.6 },
+        { "The Depths", 608, -712, 1230 },
+        { "Tidefall", 3133.05, -1081.1, 788.25 },
+        { "Toxic Grove", -2745, -317, -2272 },
+        { "Treasure Island", 8284, 195, -17093 },
+        { "Veil of the Forsaken", -2361, -11184, -7073 },
+        { "Vertigo", -107, -515, 1143 },
+        { "Volcanic Vents", -3390, -2263, 3822 },
+        { "Zeus' Sanctuary", -4294, -627, 2655 },
+        { "Zeus's Thunder of Chaos", -8878, -3539, 594 },
+    } })
+table.insert(LOCATIONS, { name = "Hub: Points of interest", list = {
+        { "Abaia's Chamber - Skycrest", 3412.14, 1562.36, 950.12 },
+        { "Abyssal Zenith - Astral Cavern", -13802.8, -11569.7, 122.17 },
+        { "Aether", -146, -654, 966 },
+        { "Appraisal (Tidefall)", 3158, -1099, 771 },
+        { "Birch Cay", 1747.19, 143, -2449.68 },
+        { "Blue crystal", 20125, 211, 5449 },
+        { "Boreal Pines - Astral Cavern", 21878.3, -148.6, 4246.41 },
+        { "Bubble Mermaid", -3550, 130, 568 },
+        { "button1", 400, 135, 265 },
+        { "button2", 5506, 147, -315 },
+        { "button3", 2930, 281, 2594 },
+        { "button4", -1715, 149, 737 },
+        { "button5", -2566, 181, 1353 },
+        { "Challangers Deep (Pool)", 747, -3353, -1566 },
+        { "Claypans - Drylands", -5765.58, 137, -915.12 },
+        { "Cryogenic Canal - Astral Cavern", -1859.83, -262.67, 4012.63 },
+        { "Detonator's Rest", -1409, -902, -3493 },
+        { "Door", 19986, 906, 5453 },
+        { "Earmark Island", 1272.97, 140.1, 542.9 },
+        { "Everturn Forest - Astral Cavern", 2523.82, -126.48, -2498.27 },
+        { "Forgotten Temple", -5286, -1759, -10000 },
+        { "Forsaken Shores Pond", -2665.24, 167.5, 1754.01 },
+        { "Ghosts Tavern", 268, 800, -6864 },
+        { "Green Crystal", 19873, 448, 5556 },
+        { "Haddock Rock", -464.45, 160.01, -454.63 },
+        { "Hall of Whispers", 4346.09, -2234.82, -4679.79 },
+        { "Harvesters Spike", -1254.81, 137.25, 1556.77 },
+        { "Hawaii", -1346, 130, -39935 },
+        { "Heaven", 1459.48, 8876.25, -1717.73 },
+        { "Inner Tidefall Castle", 4317.5, -1100.92, 919.84 },
+        { "Merlin", -960, 222, -988 },
+        { "Mermaid Cove", -3870, -1286, 505 },
+        { "Meteor", 5733, 184, 625 },
+        { "Mossjaw Rest", -4928.72, -1792.56, -10168.7 },
+        { "Obsidian Trench", -1668.61, -12350.8, 62.88 },
+        { "Oscars Locker", 213.22, -394.45, 3534.9 },
+        { "Passage of Oaths", 4284.83, -2483.02, -4680.36 },
+        { "Rodtp", 19227, 395.9, 6028.3 },
+        { "Scoria Mines", -4544.53, -707.31, -2032.08 },
+        { "Shady Bazaar", -2941, -1029, 6178 },
+        { "Snowcap Island - Astral Cavern", 2637.73, -410.04, 2521.67 },
+        { "Statue of Sovereignty", 17.04, 166.1, -1048.24 },
+        { "Sunken Reservoir", -6627.04, 158.68, -1247.25 },
+        { "Thalassar's Secret", 2897, -579, 1177 },
+        { "The Arch", 1005.03, 131.32, -1241.27 },
+        { "The Laboratory", -1934, 224, -449 },
+        { "The Sanctum", 4373.79, -2710.14, -4673.39 },
+        { "Toucan", -2933, 275, -2156 },
+        { "Trident Temple", -1480, -225, -2242 },
+        { "Underground Music Venue", 2037, -644, 2474 },
+        { "Volcanic Depths (Pool)", -3345, -2026, 4084 },
+        { "Yellow Crystal", 19488, 335, 5553 },
+        { "Zeus's Rod Room", -4294, -627, 2655 },
+    } })
+table.insert(LOCATIONS, { name = "Hub: Rods", list = {
+        { "Abyssal Specter Rod", -3802.18, -566.77, 1862.8 },
+        { "Arctic Rod", 19575, 135, 5310 },
+        { "Aurora Rod", -144.04, -515.3, 1144.86 },
+        { "Avalanche Rod", 19771, 415, 5415 },
+        { "Carbon Rod", 463.36, 150.53, 235.97 },
+        { "Challenger's Rod", 740, -3350, -1530 },
+        { "Champions Rod", -4259.02, -603.21, 1870.9 },
+        { "Cinder Block Rod", -1970, 260, -530 },
+        { "Crystalized Rod", 20296, 272, 5463 },
+        { "Depthseeker Rod", -4459.58, -605.66, 1866.08 },
+        { "Destiny Rod", 985.49, 131.32, -1234.51 },
+        { "Ethereal Prism Rod", -4360, -11170, 3710 },
+        { "Fast Rod", 463.36, 150.53, 235.97 },
+        { "Flimsy Rod", 470, 151, 232 },
+        { "Fortune Rod", -1499.41, 141.43, 750.98 },
+        { "Free Spirit Rod", -314, -864, -81 },
+        { "Fungal Rod", 2588.54, 132, -725.91 },
+        { "Hades' Soul Scythe", -7682.7, -4260.6, 363 },
+        { "Kings Rod", 1383.54, -807.31, -303.38 },
+        { "Kraken Rod", -4404.55, -996.26, 2053.8 },
+        { "Long Rod", 463.36, 150.53, 235.97 },
+        { "Lucky Rod", 463.36, 150.53, 235.97 },
+        { "Magma Rod", -1850, 165, 160 },
+        { "Magnet Rod", -234.2, 141.85, 1955.3 },
+        { "Nocturnal Rod", -144.04, -515.3, 1144.86 },
+        { "Phoenix Rod", 5963.22, 269.62, 851.75 },
+        { "Plastic Rod", 463.36, 150.53, 235.97 },
+        { "Poseidon Rod", -4078.5, -558.23, 895.9 },
+        { "Rapid Rod", -1499.41, 141.43, 750.98 },
+        { "Reinforced Rod", -990, -245, -2695 },
+        { "Rod of the Depths", 1705.52, -902.53, 1441.27 },
+        { "Rod of the Exalted One", 2232.82, -804.18, 1032.22 },
+        { "Rod of the Zenith", -13629.6, -11035.2, 349.12 },
+        { "Scurvy Rod", -2825, 215, 1515 },
+        { "Steady Rod", -1499.41, 141.43, 750.98 },
+        { "Stone Rod", 5500, 143, -316 },
+        { "Summit Rod", 20213.5, 736.7, 5713 },
+        { "Sunken Rod", -2494, 133.1, 1551.27 },
+        { "Tempest Rod", -4931.56, -595.24, 1852.3 },
+        { "Training Rod", 465, 150, 230 },
+        { "Trident Rod", -1483, -225, -2207 },
+        { "Volcanic Rod", -3175, -2030, 4020 },
+        { "Zeus Rod", -4275.86, -627.11, 2659.67 },
+    } })
+
 -- The panel is a 256-UI window (menu key P by default). It draws and handles input itself;
 -- this section only declares the controls and feeds them the script's numbers.
 local UI_URL = "https://raw.githubusercontent.com/ars240/256-UI/refs/heads/main/src.lua"
@@ -732,13 +912,726 @@ local function place_names()
 end
 
 local function stat_state()
-    if S.paused then return "paused" end
+    if S.paused and not (S.shake_on or S.reel_on) then return "paused" end
     if not foreground() then return "Roblox not in front" end
     return S.state
 end
 
+-- ---------------------------------------------------------------------------------------------
+-- Extras: treasure chests, waypoint markers, instant reel, Discord webhook, coordinates, tuning
+-- (ideas from Shoobie-code/fisch, rewritten for this script's helpers and this Calamity)
+-- ---------------------------------------------------------------------------------------------
+
+local HttpService = game:GetService("HttpService")
+
+local EX = {
+    esp_hz = 30, esp_outline = false,
+    wp_on = false, wp_fishing = false, wp_dist = true, wp_size = 7, wp_text = 14, wp_max = 0,
+    chest_on = false, chest_dist = true, chest_size = 8, chest_text = 14, chest_max = 0,
+    ir_on = false, ir_speed = 50, ir_loss = 0,
+    hook_on = false, hook_url = "", hook_start = true, hook_stats = true, hook_every = 300,
+}
+
+local function my_pos()
+    local ch = character()
+    local root = ch and child(ch, "HumanoidRootPart")
+    local p = root and prop(root, "Position")
+    if p and p.X then return p end
+    return nil
+end
+
+-- teleport on its own thread: wait for a running one, go, wait for it to land
+local function go_to(x, y, z, quiet)
+    spawn(function()
+        local t0 = tick()
+        while isteleporting() and tick() - t0 < 4 do task.wait(0.03) end
+        if not teleport(Vector3.new(x, y, z)) then
+            if not quiet then log("teleport refused") end
+            return
+        end
+        t0 = tick()
+        while isteleporting() and tick() - t0 < 4 do task.wait(0.03) end
+        if not quiet then log(string.format("teleported to %.0f, %.0f, %.0f", x, y, z)) end
+        set_state("start")
+    end)
+end
+
+-- ---- markers: a square and a label on every point of a list ----
+--
+-- One loop projects every marker ~30 times a second (draw.WorldToScreen); the lists are re-read
+-- on a timer, not per frame.
+
+local have_w2s = draw and type(draw.WorldToScreen) == "function"
+local MARKERS = {}
+
+local function marker_set(color, text_color, opt, collect, every)
+    local M = { objs = {}, list = {}, scan_t = -99, on = false, scanning = false, next_draw = 0, color = color }
+    -- A marker is a ring with a dot in it and a tag above: a dark pill with a coloured edge. Its
+    -- drawing objects are made a few per tick (74 waypoints at once was a visible hitch).
+    local function grow(n)
+        local made = 0
+        while #M.objs < n and made < 4 do
+            local ring = Drawing.new("Circle")
+            ring.NumSides, ring.Filled, ring.Thickness, ring.Color, ring.Transparency, ring.ZIndex = 24, false, 2, M.color, 1, 6
+            local dot = Drawing.new("Circle")
+            dot.NumSides, dot.Filled, dot.Color, dot.Transparency, dot.ZIndex = 10, true, M.color, 1, 6
+            local bg = Drawing.new("Square")
+            bg.Filled, bg.Color, bg.Transparency, bg.ZIndex = true, Color3.fromRGB(14, 16, 22), 0.85, 7
+            local bar = Drawing.new("Square")
+            bar.Filled, bar.Color, bar.Transparency, bar.ZIndex = true, M.color, 1, 8
+            local tx = Drawing.new("Text")
+            tx.Color, tx.Center, tx.Outline, tx.ZIndex = text_color, false, EX.esp_outline, 9
+            for _, d in ipairs({ ring, dot, bg, bar, tx }) do d.Visible = false end
+            M.objs[#M.objs + 1] = { ring = ring, dot = dot, bg = bg, bar = bar, tx = tx, vis = false }
+            made = made + 1
+        end
+    end
+    local function show(o, v)
+        if o.vis == v then return end
+        o.vis = v
+        o.ring.Visible, o.dot.Visible, o.bg.Visible, o.bar.Visible, o.tx.Visible = v, v, v, v, v
+    end
+    local function hide_from(i)
+        for k = i, #M.objs do show(M.objs[k], false) end
+    end
+    function M.set(on)
+        M.on = on and true or false
+        M.scan_t = -99
+        if not M.on then hide_from(1) end
+    end
+    -- the accent follows the window's theme
+    function M.recolor(c)
+        if M.color == c then return end
+        M.color = c
+        for _, o in ipairs(M.objs) do o.ring.Color, o.dot.Color, o.bar.Color = c, c, c end
+    end
+    function M.set_outline(v)
+        for _, o in ipairs(M.objs) do o.tx.Outline = v end
+    end
+    -- the list is read on its own thread (the collectors yield now and then), never in the draw tick
+    local function rescan()
+        M.scanning = true
+        spawn(function()
+            local ok, list = pcall(collect)
+            if ok and type(list) == "table" then
+                for _, m in ipairs(list) do m.x, m.y, m.z = m.pos.X, m.pos.Y, m.pos.Z end
+                M.list = list
+            end
+            M.scanning = false
+        end)
+    end
+    function M.tick(now, me)
+        if not M.on or not have_w2s then return end
+        if now < M.next_draw then return end              -- the draw rate is a setting, not the loop's pace
+        M.next_draw = now + 1 / math.max(5, EX.esp_hz)
+        if not M.scanning and now - M.scan_t >= every() then
+            M.scan_t = now
+            rescan()
+        end
+        local list = M.list
+        local n = #list
+        grow(n)
+        local size, tsize, maxd, showd = EX[opt.size], EX[opt.text], EX[opt.max], EX[opt.dist]
+        local th = tsize + 9                              -- the pill's height
+        local maxd2 = maxd * maxd
+        local mx, my, mz
+        if me then mx, my, mz = me.X, me.Y, me.Z end
+        local w2s = draw.WorldToScreen
+        local objs = M.objs
+        local top = math.min(n, #objs)
+        for i = 1, top do
+            local o, m = objs[i], list[i]
+            local shown = false
+            local d2
+            if mx then
+                local dx, dy, dz = m.x - mx, m.y - my, m.z - mz
+                d2 = dx * dx + dy * dy + dz * dz
+            end
+            if not (maxd > 0 and d2 and d2 > maxd2) then
+                local x, y = w2s(m.x, m.y, m.z)
+                if x then
+                    local dd = (showd and d2) and math.floor(math.sqrt(d2) / 5) * 5 or nil   -- steps of 5: fewer text changes
+                    local changed = false
+                    if o.name ~= m.name or o.d ~= dd or o.tsize ~= tsize then
+                        local label = dd and string.format("%s  %dm", m.name, dd) or m.name
+                        o.tx.Text, o.tx.Size = label, tsize
+                        o.tw = #label * tsize * 0.55 + 18
+                        o.bg.Size = Vector2.new(o.tw, th)
+                        o.bar.Size = Vector2.new(3, th)
+                        o.name, o.d, o.tsize = m.name, dd, tsize
+                        changed = true
+                    end
+                    if o.size ~= size then
+                        o.ring.Radius, o.dot.Radius = size, math.max(2, size * 0.3)
+                        o.size = size
+                        changed = true
+                    end
+                    if changed or o.x ~= x or o.y ~= y then
+                        o.x, o.y = x, y
+                        local c = Vector2.new(x, y)
+                        o.ring.Position, o.dot.Position = c, c
+                        local tx_, ty_ = x - o.tw / 2, y - size - th - 5
+                        if ty_ < 2 then ty_ = y + size + 5 end          -- no room above: below the ring
+                        local p = Vector2.new(tx_, ty_)
+                        o.bg.Position, o.bar.Position = p, p
+                        o.tx.Position = Vector2.new(tx_ + 10, ty_ + (th - tsize) / 2 - 1)
+                    end
+                    show(o, true)
+                    shown = true
+                end
+            end
+            if not shown then show(o, false) end
+        end
+        hide_from(top + 1)
+    end
+    function M.destroy()
+        for _, o in ipairs(M.objs) do
+            for _, d in ipairs({ o.ring, o.dot, o.bg, o.bar, o.tx }) do pcall(function() d:Remove() end) end
+        end
+        M.objs = {}
+    end
+    MARKERS[#MARKERS + 1] = M
+    return M
+end
+
+-- waypoints: workspace.zones.player (and .fishing) - a part per zone, its name in a "zonename" value
+local function collect_zones()
+    local out, seen = {}, {}
+    local zones = child(workspace, "zones")
+    for _, group in ipairs(EX.wp_fishing and { "player", "fishing" } or { "player" }) do
+        for zi, z in ipairs(children(child(zones, group))) do
+            if zi % 20 == 0 then task.wait() end
+            local p = prop(z, "Position")
+            if p and p.X then
+                local nv = child(z, "zonename")
+                local nm = nv and prop(nv, "Value")
+                if type(nm) ~= "string" or nm == "" then nm = name_of(z) end
+                if not seen[nm] then seen[nm] = true; out[#out + 1] = { name = nm, pos = p } end
+            end
+        end
+    end
+    return out
+end
+
+-- treasure chests: workspace.world.chests and .ActiveChestsFolder
+local function collect_chests()
+    local out = {}
+    local world = child(workspace, "world")
+    for _, folder in ipairs({ child(world, "chests"), child(world, "ActiveChestsFolder") }) do
+        for _, c in ipairs(children(folder)) do
+            local p = prop(c, "Position")
+            if p and p.X then out[#out + 1] = { name = "Chest", pos = p } end
+        end
+    end
+    return out
+end
+
+local WP = marker_set(Color3.fromRGB(122, 134, 255), Color3.fromRGB(245, 245, 250),
+    { size = "wp_size", text = "wp_text", max = "wp_max", dist = "wp_dist" }, collect_zones, function() return 60 end)
+local CH = marker_set(Color3.fromRGB(122, 134, 255), Color3.fromRGB(245, 245, 250),
+    { size = "chest_size", text = "chest_text", max = "chest_max", dist = "chest_dist" }, collect_chests, function() return 1.5 end)
+
+-- ---- chest teleports and the collect-all run ----
+
+local RUN = { active = false, visited = 0 }
+local chest_cycle = 0
+
+local function chest_tp_nearest()
+    local list = collect_chests()
+    if #list == 0 then log("no treasure chests up right now"); return end
+    local me, best, bd = my_pos(), nil, nil
+    for _, c in ipairs(list) do
+        local d = me and (c.pos - me).Magnitude or 0
+        if not bd or d < bd then best, bd = c, d end
+    end
+    go_to(best.pos.X, best.pos.Y + 3, best.pos.Z)
+end
+
+local function chest_tp_next()
+    local list = collect_chests()
+    if #list == 0 then log("no treasure chests up right now"); return end
+    chest_cycle = chest_cycle % #list + 1
+    local c = list[chest_cycle]
+    go_to(c.pos.X, c.pos.Y + 3, c.pos.Z)
+end
+
+local function chest_run_stop()
+    if not RUN.active then return end
+    RUN.active = false
+    log("chest run stopped (" .. RUN.visited .. " visited)")
+end
+
+local function chest_run_start()
+    if RUN.active then return end
+    local list = collect_chests()
+    if #list == 0 then log("chest run: no chests found"); return end
+    RUN.active, RUN.visited = true, 0
+    hold(false)
+    log("chest run: visiting " .. #list .. " chest(s)")
+    spawn(function()
+        for _, c in ipairs(list) do
+            if not RUN.active then break end
+            local t0 = tick()
+            while isteleporting() and tick() - t0 < 4 do task.wait(0.03) end
+            if teleport(c.pos) then
+                t0 = tick()
+                while isteleporting() and tick() - t0 < 4 do task.wait(0.03) end
+                task.wait(0.15)
+                tap(0x45, 0.15)             -- E: open it
+                RUN.visited = RUN.visited + 1
+                task.wait(0.2)
+            end
+        end
+        if RUN.active then log("chest run done: " .. RUN.visited .. " chest(s) visited") end
+        RUN.active = false
+        set_state("start")
+    end)
+end
+
+-- ---- instant reel ----
+--
+-- The reel's speed lives in a table of the game's own Luau scripts (progressefficiency, and a
+-- loss multiplier). gc.find locates the tables and gc.set writes the numbers - nothing is fired at
+-- the server, but it is a change to the game's data: off by default. It is applied each time a reel
+-- opens, because the game may build a fresh table per reel. Nothing is written while Safe Mode is on.
+
+local IR = { on = false, reel = false, busy = false, n = 0, combo = 0, orig = {} }
+
+-- The reel (the game's ReelController, read from Workspace\fisch_src) does not keep its speed in a
+-- field you can set: every frame it rebuilds reel.progressefficiency and reel.progressLossMultiplier
+-- from reel._active_modifiers[name].add / .force / .force_final, so a write to the field is gone one
+-- frame later. The number that sticks is the first entry of the modifier's array:
+--   _active_modifiers.progressefficiency.add[1]      -> the speed
+--   _active_modifiers.progressLossMultiplier.add[1]  -> the loss
+-- Verified live on 2026-11-07 (probe 4): writing 40 there made the reel finish in seconds.
+--
+-- gc.geti / gc.seti cannot read these arrays on this build (they answer nil / "no such index"),
+-- so the number is written raw: Luau Table +8 = sizearray, +0x28 = the array; its first TValue is
+-- 16 bytes, the double at +0 and the type tag at +0xC (3 = number). Anything else there (the game
+-- keeps some modifiers as NumberValue Instances) is left alone. The layout is checked against
+-- gc.len first, and nothing is written if it does not match.
+--
+-- gc.find locates the live reel table only with some keys, and only a reel that is open and
+-- active: a finished reel lingers for about a second. The searches rotate through keys known to
+-- work (a repeated search can hand back last reel's table).
+local IR_CANDS = {
+    { "reel_progress" }, { "OnBarBounce" }, { "OnFishMove" }, { "OnRenderStep" }, { "PreMinigameEnd" },
+    { "OnSlash" }, { "logicTweens" }, { "BuildSnapshot" }, { "OnLogicStep" }, { "barPosition", "barSize" },
+}
+local IR_KINDS = { "add", "force", "force_final" }
+
+local function ir_rd(ty, a)
+    local ok, v = pcall(memory_read, ty, a)
+    if ok then return v end
+    return nil
+end
+
+-- the address of the array's first TValue, when it is a live one-or-more entry array of plain numbers
+-- (nil and the reason otherwise)
+local function ir_ptr(arr)
+    -- gc.len is not trusted: probe 6 saw it answer 0 for an array whose raw sizearray was 1 and whose
+    -- first entry was a good number (that read as "empty" and the reel went unpatched). gc.len only
+    -- says whether the table is still alive; the raw size and the entry's tag decide.
+    local ok, len = pcall(gc.len, arr)
+    if not ok or type(len) ~= "number" then return nil, "table gone" end
+    local size = ir_rd("int", arr + 8)
+    if type(size) ~= "number" or size < 1 or size > 64 then return nil, "empty" end
+    local ptr = ir_rd("uint64", arr + 0x28)
+    if type(ptr) ~= "number" or ptr < 0x10000 then return nil, "no array" end
+    local tag = ir_rd("int", ptr + 0xC)
+    if tag ~= 3 then return nil, "not a number (tag " .. tostring(tag) .. ")" end
+    return ptr
+end
+
+local function ir_arr_set(arr, want)
+    local ptr, why = ir_ptr(arr)
+    if not ptr then return false, why end
+    local cur = ir_rd("double", ptr)
+    if type(cur) ~= "number" then return false, "unreadable" end
+    local id = tostring(arr)
+    if IR.orig[id] == nil then IR.orig[id] = { arr = arr, v = cur } end
+    if cur == want then return true, "ok" end
+    if pcall(memory_write, "double", ptr, want + 0.0) then return true, "ok" end
+    return false, "write failed"
+end
+
+-- one modifier table: how many numbers in it are now what was asked for (nil when it is gone);
+-- notes[name.kind] says what happened to each array
+local function ir_patch(addr, notes)
+    local okr, fields, types = pcall(gc.read, addr)
+    if not okr or type(fields) ~= "table" then return nil end
+    local n = 0
+    for _, spec in ipairs({ { "progressefficiency", EX.ir_speed }, { "progressLossMultiplier", EX.ir_loss } }) do
+        local name, want = spec[1], spec[2]
+        if types[name] == "table" then
+            local okk, kf, kt = pcall(gc.read, fields[name])
+            if okk and type(kf) == "table" then
+                for _, kind in ipairs(IR_KINDS) do
+                    if kt[kind] == "table" then
+                        local ok, why = ir_arr_set(kf[kind], want)
+                        if ok then n = n + 1 end
+                        if notes then notes[#notes + 1] = name .. "." .. kind .. ": " .. tostring(why) end
+                    end
+                end
+            end
+        elseif notes then
+            notes[#notes + 1] = name .. ": " .. tostring(types[name] or "missing")
+        end
+    end
+    return n
+end
+
+-- The open reel's table and its _active_modifiers table. A reel is live when it has a progress
+-- between 0 and 100 and its modifier table still has progressefficiency (a finished reel has its
+-- modifiers cleared). `active` is NOT required: it only turns true about two seconds into the reel,
+-- and waiting for it cost those two seconds.
+local function ir_find_reel(keys)
+    local ok, addrs = pcall(gc.find, table.unpack(keys))
+    if not ok or type(addrs) ~= "table" then return nil, "search failed" end
+    local seen, last = 0, "no reel tables"
+    for _, a in ipairs(addrs) do
+        local okr, f, t = pcall(gc.read, a)
+        if okr and type(f) == "table" and t._active_modifiers == "table" then
+            seen = seen + 1
+            if type(f.progress) == "number" and f.progress > 0 and f.progress < 100 then
+                local okm, _, mt = pcall(gc.read, f._active_modifiers)
+                if okm and type(mt) == "table" and mt.progressefficiency == "table" then
+                    return a, f._active_modifiers
+                end
+                last = "a reel table with no modifiers (finished)"
+            else
+                last = "a reel table at progress " .. tostring(f.progress)
+            end
+        end
+    end
+    return nil, string.format("%d table(s), %d reel(s); %s", #addrs, seen, last)
+end
+
+-- ReelController's class table (the game's `v22`) is permanent and holds `ActiveReel`, the reel
+-- that is open right now (set the moment a reel starts, cleared when it is destroyed). Finding it
+-- once means every later reel is one gc.get away instead of a 1-second heap search per attempt,
+-- which is what made the old code miss the first seconds of a reel. It is recognised by its
+-- OnReelCreated signal and its methods.
+local IR_CLASS_KEYS = { { "OnReelCreated" }, { "ActiveReel" }, { "ActiveReel", "OnReelCreated" }, { "Aborted" } }
+function EX.ir_find_class()
+    if IR.class then return IR.class end
+    IR.ccombo = (IR.ccombo or 0) % #IR_CLASS_KEYS + 1
+    local keys = IR_CLASS_KEYS[IR.ccombo]
+    local ok, addrs = pcall(gc.find, table.unpack(keys))
+    if not ok or type(addrs) ~= "table" then return nil end
+    for _, a in ipairs(addrs) do
+        local okr, _, ty = pcall(gc.read, a)
+        if okr and type(ty) == "table" and ty.OnReelCreated == "table" and ty.AddModifier ~= nil and ty.new ~= nil then
+            IR.class = a
+            log("instant reel: reel class table found (via " .. table.concat(keys, "+") .. ")")
+            return a
+        end
+    end
+    return nil
+end
+
+-- the open reel and its modifier table through the class table (nil when there is none)
+local function ir_class_reel()
+    local cls = IR.class
+    if not cls then return nil end
+    local ok, v, ty = pcall(gc.get, cls, "ActiveReel")
+    if not ok then return nil end
+    if ty == "gone" then IR.class = nil; return nil end
+    if ty ~= "table" or type(v) ~= "number" then return nil end
+    local okr, f, t = pcall(gc.read, v)
+    if not okr or type(f) ~= "table" or t._active_modifiers ~= "table" then return nil end
+    if type(f.progress) ~= "number" or f.progress >= 100 then return nil end
+    local okm, _, mt = pcall(gc.read, f._active_modifiers)
+    if not okm or type(mt) ~= "table" or mt.progressefficiency ~= "table" then return nil end
+    return v, f._active_modifiers
+end
+
+function EX.ir_session()
+    if IR.busy or not IR.on then return end
+    if type(gc) ~= "table" or type(gc.find) ~= "function" or type(gc.read) ~= "function" or type(gc.len) ~= "function"
+        or type(memory_read) ~= "function" or type(memory_write) ~= "function" then
+        say("ir_api", "instant reel: needs gc.find / gc.read / gc.len and memory_read / memory_write")
+        return
+    end
+    IR.busy = true
+    spawn(function()
+        local reel, mods, tries, diag = nil, nil, 0, ""
+        IR.orig = {}
+        local t0 = tick()
+        -- 1: find this reel (searches with different keys, while it is open)
+        local via = "class table"
+        while IR.on and IR.reel and S.running and not reel and tries < 60 do
+            tries = tries + 1
+            reel, mods = ir_class_reel()
+            if not reel and not IR.class then
+                EX.ir_find_class()                       -- one heap search for the class table
+                reel, mods = ir_class_reel()
+            end
+            if not reel and not IR.class then            -- still no class table: search for the reel itself
+                via = "key search"
+                IR.combo = IR.combo % #IR_CANDS + 1
+                reel, mods = ir_find_reel(IR_CANDS[IR.combo])
+                if not reel then diag = tostring(mods) end
+            end
+            if not reel then task.wait(0.03) end
+        end
+        if not reel then
+            say("ir_nf", "instant reel: the reel's table was not found yet (" .. diag .. ")")
+            IR.busy = false
+            return
+        end
+        IR.cur, IR.patched = mods, true
+        -- 2: hold the numbers while the reel is open (a boost can add onto the first entry); what
+        -- happened to each array is logged whenever the count changes
+        local last_n = nil
+        while IR.on and IR.reel and S.running do
+            local okp, prog = pcall(gc.get, reel, "progress")
+            if not okp or type(prog) ~= "number" or prog >= 100 then break end
+            local notes = {}
+            local n = ir_patch(mods, notes)
+            if n == nil then break end
+            if n ~= last_n then
+                last_n = n
+                log(string.format("instant reel: reel found after %.1f s (%s, try %d), %d value(s) set - %s", tick() - t0, via, tries, n, table.concat(notes, "; ")))
+            end
+            IR.n = n
+            task.wait(0.15)
+        end
+        IR.cur = nil
+        IR.orig = {}        -- the reel is over: its arrays are gone and their addresses may be someone else's
+        IR.busy = false
+    end)
+end
+
+function EX.ir_start()
+    IR.on = true
+    if IR.reel then EX.ir_session() end
+    if not IR.class and not IR.finding then
+        IR.finding = true
+        spawn(function()
+            local tries = 0
+            while IR.on and S.running and not IR.class and tries < #IR_CLASS_KEYS * 2 do
+                tries = tries + 1
+                EX.ir_find_class()
+                task.wait(0.2)
+            end
+            if not IR.class then say("ir_class", "instant reel: the reel class table was not found - searching per reel instead") end
+            IR.finding = false
+        end)
+    end
+end
+
+local ir_prev, ir_t = false, 0
+local function ir_watch(now)
+    if not EX.ir_on or now - ir_t < 0.25 then return end
+    ir_t = now
+    local gui = player_gui()
+    local open = (gui and child(gui, "reel")) ~= nil
+    IR.reel = open
+    if not open then IR.patched = false end
+    if open and not IR.busy and not IR.patched then EX.ir_session() end
+    ir_prev = open
+end
+
+function EX.ir_stop()
+    IR.on = false
+    -- a reel that is open right now gets its numbers back; a finished one is gone
+    local restored = 0
+    if IR.cur then
+        for id, o in pairs(IR.orig) do
+            local ptr = ir_ptr(o.arr)
+            if ptr and pcall(memory_write, "double", ptr, o.v + 0.0) then restored = restored + 1 end
+        end
+    end
+    IR.orig, IR.n = {}, 0
+    if restored > 0 then log("instant reel: " .. restored .. " value(s) put back") end
+end
+
+-- ---- Discord webhook ----
+
+local function hook_valid()
+    local u = EX.hook_url
+    return type(u) == "string" and (u:find("discord.com/api/webhooks/", 1, true) or u:find("discordapp.com/api/webhooks/", 1, true)) ~= nil
+end
+
+local function hook_post(text)
+    if not (EX.hook_on and hook_valid()) then return end
+    local url = EX.hook_url
+    spawn(function()
+        pcall(request, {
+            Url = url, Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode({ content = text }),
+        })
+    end)
+end
+
+local function hook_stats_text()
+    local lp = me()
+    local rod = equipped_rod()
+    return string.format("**Stats**\nUser: %s\nState: %s    Rod: %s\nCaught: %d    Casts: %d    Shakes: %d",
+        lp and name_of(lp) or "?", stat_state(), rod and name_of(rod) or "none", S.caught, S.casts, S.shakes)
+end
+
+local hook_start_sent, hook_last = false, 0
+local function hook_tick(now)
+    if not (EX.hook_on and hook_valid()) then return end
+    if EX.hook_start and not hook_start_sent then
+        hook_start_sent = true
+        hook_post("**Started**\nUser: " .. (me() and name_of(me()) or "?"))
+    end
+    if EX.hook_stats and now - hook_last >= EX.hook_every then
+        hook_last = now
+        hook_post(hook_stats_text())
+    end
+end
+
+-- ---- the loop that draws the markers ----
+-- The ESP wears the window's two theme colours (Settings > Theme > Color 1 / Color 2): waypoints
+-- (both waypoints and chests use Color 1). The library keeps its theme private, but the colour pickers it
+-- builds hold the live values, so they are read from the settings tab twice a second.
+local function theme_colors()
+    local win = EX.ui_win
+    local tab = win and win.GetSettingsTab and win:GetSettingsTab()
+    if not tab then return nil end
+    local a, b
+    for _, sec in ipairs(tab.Sections or {}) do
+        for _, row in ipairs(sec.Rows or {}) do
+            if row.Name == "Color 1" and typeof(row.Value) == "Color3" then a = row.Value
+            elseif row.Name == "Color 2" and typeof(row.Value) == "Color3" then b = row.Value end
+        end
+    end
+    return a, b
+end
+
+local theme_t = -99
+local function markers_step(now)
+    if now - theme_t >= 0.5 then
+        theme_t = now
+        local a, b = theme_colors()
+        if a then WP.recolor(a) end
+        if a then CH.recolor(a) end
+    end
+    if not (WP.on or CH.on) then return end
+    if now - (EX.me_t or -99) >= 0.2 then EX.me_t, EX.me = now, my_pos() end
+    WP.tick(now, EX.me)
+    CH.tick(now, EX.me)
+end
+
+-- ---- coordinates ----
+local COORD = ""
+local function parse_coords(s)
+    s = tostring(s or ""):gsub("[XxYyZz]%s*:", ""):gsub(",", " ")
+    local n = {}
+    for v in s:gmatch("%-?%d+%.?%d*") do n[#n + 1] = tonumber(v) end
+    if #n >= 3 then return n[1], n[2], n[3] end
+end
+
+-- ---- the window's tabs for all of the above ----
+local function build_extras(win, fish, travel)
+    -- tuning: the numbers the fishing steps use, live
+    local tune = fish      -- the tuning sections live on the Fishing tab
+    local cast = tune:Section("Casting", "Left")
+    cast:Slider("Cast hold (s)", CFG.CAST_HOLD, 0.01, 0.2, 1.6, "s", function(v) CFG.CAST_HOLD = v end)
+    cast:Slider("Recast if nothing in (s)", CFG.CAST_TIMEOUT, 1, 10, 90, "s", function(v) CFG.CAST_TIMEOUT = v end)
+    cast:Slider("After a catch (s)", CFG.AFTER_CATCH, 0.1, 0, 6, "s", function(v) CFG.AFTER_CATCH = v end)
+    cast:Slider("Shake click gap (s)", CFG.SHAKE_GAP, 0.01, 0.02, 0.4, "s", function(v) CFG.SHAKE_GAP = v end)
+    local reel = tune:Section("Reel", "Right")
+    reel:Slider("Look ahead (s)", CFG.REEL_LOOKAHEAD, 0.01, 0.05, 0.8, "s", function(v) CFG.REEL_LOOKAHEAD = v end)
+    reel:Slider("On-target zone", CFG.REEL_ZONE, 0.01, 0.05, 0.5, "", function(v) CFG.REEL_ZONE = v end)
+    reel:Slider("Reel timeout (s)", CFG.REEL_TIMEOUT, 1, 15, 180, "s", function(v) CFG.REEL_TIMEOUT = v end)
+    reel:Info("Rod fishing only: Spear and Gun minigames are not part of this script.")
+
+    -- the instant reel
+    local ir = tune:Section("Instant reel", "Right")
+    ir:Toggle("Enable instant reel", false, function(on)
+        EX.ir_on = on
+        if on then EX.ir_start() else EX.ir_stop() end
+        log("instant reel " .. (on and "on" or "off"))
+    end, "Changes the game's reel numbers through gc.set. Off by default.")
+    ir:Slider("Reel speed", EX.ir_speed, 1, 1, 500, "", function(v) EX.ir_speed = v end)
+
+    -- ESP
+    local esp = win:Tab("ESP", "eye")
+    local wp = esp:Section("Waypoints", "Left")
+    wp:Toggle("Show waypoints", false, function(on) EX.wp_on = on; WP.set(on) end)
+    wp:Toggle("Include fishing spots", false, function(on) EX.wp_fishing = on; WP.set(EX.wp_on) end)
+    wp:Toggle("Show distance", true, function(on) EX.wp_dist = on end)
+    wp:Slider("Marker size", EX.wp_size, 1, 2, 24, "px", function(v) EX.wp_size = v end)
+    wp:Slider("Text size", EX.wp_text, 1, 8, 28, "", function(v) EX.wp_text = v end)
+    wp:Slider("Max distance (0 = all)", EX.wp_max, 50, 0, 5000, "", function(v) EX.wp_max = v end)
+
+    local ch = esp:Section("Treasure chests", "Right")
+    ch:Toggle("Show treasure chests", false, function(on) EX.chest_on = on; CH.set(on) end)
+    ch:Toggle("Show distance", true, function(on) EX.chest_dist = on end)
+    ch:Slider("Marker size", EX.chest_size, 1, 2, 24, "px", function(v) EX.chest_size = v end)
+    ch:Slider("Text size", EX.chest_text, 1, 8, 28, "", function(v) EX.chest_text = v end)
+    ch:Slider("Max distance (0 = all)", EX.chest_max, 50, 0, 5000, "", function(v) EX.chest_max = v end)
+    ch:Divider("Chest teleports")
+    ch:Button("Teleport to nearest chest", chest_tp_nearest)
+    ch:Button("Teleport to next chest", chest_tp_next)
+    ch:Button("Collect all chests", chest_run_start)
+    ch:Button("Stop chest run", chest_run_stop)
+    local perf = esp:Section("Performance", "Left")
+    perf:Slider("ESP update rate (Hz)", EX.esp_hz, 5, 10, 120, "Hz", function(v) EX.esp_hz = v end)
+    perf:Toggle("Text outline (slower)", EX.esp_outline, function(on)
+        EX.esp_outline = on
+        WP.set_outline(on); CH.set_outline(on)
+    end)
+
+    -- coordinates (the teleport tab's own section)
+    local co = travel:Section("Go to a point", "Left")      -- on the Travel tab, under the places
+    local box = co:Textbox("x, y, z", "", function(t) COORD = t or "" end)
+    co:Button("Fill with my position", function()
+        local p = my_pos()
+        if not p then log("no character"); return end
+        local s = string.format("%.2f, %.2f, %.2f", p.X, p.Y, p.Z)
+        COORD = s
+        pcall(function() box:Set(s) end)
+        pcall(setclipboard, s)
+    end)
+    co:Button("Teleport to coordinates", function()
+        local x, y, z = parse_coords(COORD)
+        if not x then log("bad coordinates: " .. tostring(COORD)); return end
+        go_to(x, y, z)
+    end)
+
+    -- webhook
+    local w = win:SettingsSection("Discord webhook", "Right")     -- in the settings tab
+    -- the window's text boxes cannot paste (Ctrl+V is not handled by the library), so the URL comes
+    -- in through a button that reads the clipboard, or from a file
+    local url_box = w:Textbox("Webhook URL", "", function(t) EX.hook_url = t or "" end)
+    local function take_url(text, from)
+        text = tostring(text or ""):gsub("%s+", "")
+        if text == "" then log("webhook: " .. from .. " is empty"); return end
+        pcall(function() url_box:Set(text) end)
+        EX.hook_url = text
+        log("webhook: URL taken from " .. from .. (hook_valid() and "" or " (this does not look like a Discord webhook URL)"))
+    end
+    w:Button("Paste URL from clipboard", function()
+        local ok, text = pcall(getclipboard)
+        take_url(ok and text or "", "the clipboard")
+    end)
+    w:Button("Load URL from webhook_url.txt", function()
+        local ok, text = pcall(readfile, "webhook_url.txt")
+        take_url(ok and text or "", "webhook_url.txt")
+    end)
+    w:Toggle("Enable webhook", false, function(on) EX.hook_on = on; hook_start_sent = false end)
+    w:Toggle("Send a startup message", true, function(on) EX.hook_start = on end)
+    w:Toggle("Send periodic stats", true, function(on) EX.hook_stats = on end)
+    w:Slider("Stats interval (s)", EX.hook_every, 10, 30, 3600, "s", function(v) EX.hook_every = v end)
+    w:Button("Send test stats now", function()
+        if not hook_valid() then log("webhook: not a Discord webhook URL"); return end
+        local was = EX.hook_on
+        EX.hook_on = true
+        hook_post(hook_stats_text())
+        EX.hook_on = was
+    end)
+end
+
 local function build_panel()
     local win = Lib:CreateWindow({ title = "Fisch", subtitle = "Calamity Hub", size = Vector2.new(640, 440) })
+    EX.ui_win = win
 
     local fish = win:Tab("Fishing", "crosshair")
     local auto = fish:Section("Automation", "Left")
@@ -753,26 +1646,17 @@ local function build_panel()
     end)
 
     local stats = fish:Section("Status", "Right")
-    stats:Label(function() return "State: " .. stat_state() end)
     stats:Label(function()
         local up = tick() - T0
         return string.format("Caught: %d  (%.1f/min)", S.caught, S.caught / math.max(up / 60, 0.01))
     end)
-    stats:Label(function() return "Casts: " .. S.casts end)
-    stats:Label(function() return "Shakes: " .. S.shakes end)
     stats:Label(function()
         local up = tick() - T0
         return string.format("Uptime: %d:%02d", math.floor(up / 60), math.floor(up % 60))
     end)
 
-    local move_tab = win:Tab("Movement", "eye")
-    local mv = move_tab:Section("Water", "Left")
-    mv:Toggle("Water Walk", false, function(on)
-        S.jesus_on = on; log("water walk " .. (on and "on" or "off"))
-    end)
-
-    local tp_tab = win:Tab("Teleport", "map")
-    local tp = tp_tab:Section("Places", "Left")
+    local travel = win:Tab("Travel", "map")
+    local tp = travel:Section("Places", "Left")
     local names = place_names()
     loc_dd = tp:Dropdown("Place", { names[1] }, names, false, function(v)
         local hit = v and v[1] and PLACES[v[1]]
@@ -781,16 +1665,23 @@ local function build_panel()
     tp:Button("Teleport", function() TP.go() end)
     tp:Label(function() return TP.msg end)
 
+    build_extras(win, fish, travel)
     win:AddSettingsTab("cog")
 end
 
 -- the found places were rebuilt: the dropdown gets the new list and starts at the first
 local function refresh_places()
+    local prev = loc_dd and loc_dd.Value and loc_dd.Value[1]
     TP.cat, TP.loc = 1, 1
     if not loc_dd then return end
     local names = place_names()
     loc_dd:Refresh(names)
-    loc_dd.Value = { names[1] }
+    if prev and PLACES[prev] then
+        loc_dd.Value = { prev }
+        TP.cat, TP.loc = PLACES[prev][1], PLACES[prev][2]
+    else
+        loc_dd.Value = { names[1] }
+    end
 end
 
 
@@ -831,9 +1722,9 @@ end
 --   npcs     workspace.world.npcs
 -- Fisch streams its map: only what is near you is in memory (the first scan found 3 islands and 1
 -- rod, all within a few hundred studs). ServerStorage never reaches a client at all. A one-off
--- tour of the map (2026-10-31: 48 stops, 107 islands, 44 rods, 230 NPCs) filled
--- Workspace\fisch_places_cache.txt, which is read at the start; what is loaded near you at the
--- start is added to it, so a place the game adds later joins the list once you have been near it.
+-- tour of the map once found 107 islands, 44 rods and 230 NPCs, but nothing is read from a cache
+-- file any more: only what the game has loaded is listed. It is scanned at the start and every
+-- 30 s after, so places join the list (for this session) as you travel near them.
 
 local PART = { Part = true, MeshPart = true, UnionOperation = true, WedgePart = true, SpawnLocation = true, Seat = true }
 local function vec_ok(p) return p and p.X and p.X == p.X and math.abs(p.X) < 1e6 and math.abs(p.Y) < 1e6 end
@@ -867,32 +1758,6 @@ end
 -- what has been found: kind -> name -> {x, y, z}
 local KINDS = { { key = "isl", name = "Islands" }, { key = "rod", name = "Rods" }, { key = "npc", name = "NPCs (in game)" } }
 local FOUND = { isl = {}, rod = {}, npc = {} }
-local CACHE = "fisch_places_cache.txt"
-
-local function load_cache()
-    local ok, text = pcall(readfile, CACHE)
-    if not ok or type(text) ~= "string" then return 0 end
-    local n = 0
-    for line in text:gmatch("[^\n]+") do
-        local k, name, x, y, z = line:match("^(%a+)|(.-)|([%-%d%.e]+)|([%-%d%.e]+)|([%-%d%.e]+)")
-        if k and FOUND[k] and tonumber(x) then
-            FOUND[k][name] = { tonumber(x), tonumber(y), tonumber(z) }
-            n = n + 1
-        end
-    end
-    return n
-end
-
-local function save_cache()
-    local lines = {}
-    for _, kd in ipairs(KINDS) do
-        for name, p in pairs(FOUND[kd.key]) do
-            lines[#lines + 1] = string.format("%s|%s|%.2f|%.2f|%.2f", kd.key, name, p[1], p[2], p[3])
-        end
-    end
-    table.sort(lines)
-    pcall(writefile, CACHE, table.concat(lines, "\n") .. "\n")
-end
 
 local function count(t) local n = 0; for _ in pairs(t) do n = n + 1 end; return n end
 
@@ -983,149 +1848,15 @@ local function summary()
     return count(FOUND.isl) .. " islands, " .. count(FOUND.rod) .. " rods, " .. count(FOUND.npc) .. " npcs"
 end
 
-local function live_scan()
-    local cached = load_cache()
-    scan_here()
-    save_cache()
-    rebuild_live()
-    write_places()
-    log("places: " .. summary() .. (cached > 0 and " (" .. cached .. " from the cache)" or " (no cache - only what is loaded near you)"))
-end
-
-
--- ---------------------------------------------------------------------------------------------
--- Water Walk: an invisible floor at the water's surface, under you
---
--- Fisch only lets you cast while standing on something, so walking on water has to be a real
--- floor, not a hover: one collidable, invisible Part made with Instance.new and kept
--- under you at the water's height. Instance.new makes it with its position, size and collision;
--- it cannot be anchored from outside the engine, so every tick it is set back at its spot with
--- zero speed. It follows only once you are a few studs from its middle.
---
--- The water's height starts at Fisch's sea level and is learned from you whenever you swim (the
--- root sits at the surface; waves are averaged in, a jump of 3+ studs is a new body of water).
--- Falling in lifts you onto the floor. On land the floor sits under the island, out of the way.
--- Off, or the script stopped: the part is destroyed.
--- ---------------------------------------------------------------------------------------------
-
-S.jesus_on = false
-
-local function off(name, fallback)
-    local ok, v = pcall(getoffset, name)
-    return (ok and type(v) == "number" and v > 0) and v or fallback
-end
-local OFFS = {
-    prim      = off("BasePart::Primitive", 0x188),
-    pos       = off("Primitive::Position", 0xec),
-    vel       = off("Primitive::AssemblyLinearVelocity", 0xf8),
-    state     = off("Humanoid::HumanoidState", 0x8c0),
-    state_id  = off("Humanoid::HumanoidStateID", 0x20),
-    hip       = off("Humanoid::HipHeight", 0x194),
-}
-local ST_SWIMMING = 4                    -- Enum.HumanoidStateType.Swimming
-local FLOOR = { size = 36, follow = 10, thick = 2 }   -- studs: its width, how far you go before it follows, its height
-
-local W = { water_y = 126.0, learned = false, look_t = -99, root = nil, hum = nil,
-            part = nil, px = nil, pz = nil, py = nil, busy = false, failed_t = -99 }
-local function mr(t, a) local ok, v = pcall(memory_read, t, a); if ok then return v end end
-local function mw(t, a, v) pcall(memory_write, t, a, v) end
-
-local function floor_gone()
-    if not W.part then return true end
-    local ok, cls = pcall(function() return W.part.ClassName end)
-    return not ok or cls ~= "Part"
-end
-
-local function destroy_floor()
-    if W.part then pcall(function() W.part:Destroy() end) end
-    W.part, W.px, W.pz, W.py = nil, nil, nil, nil
-end
-
--- the floor's top at the water's surface, centred under (x, z); made the first time
-local function place_floor(x, z)
-    local top = W.water_y
-    local pos = Vector3.new(x, top - FLOOR.thick / 2, z)
-    if floor_gone() then
-        -- Instance.new sets the position, size, transparency and collision as it makes the part.
-        -- Anchored cannot be set from outside the engine, so the part is held by pin_floor instead.
-        local ok, p = pcall(Instance.new, "Part", workspace, {
-            Position = pos, Size = Vector3.new(FLOOR.size, FLOOR.thick, FLOOR.size),
-            Transparency = 1, CanCollide = true })
-        if not ok or not p then return false, "Instance.new failed: " .. tostring(p) end
-        W.part = p
-        pcall(function() p.Name = "wwfloor" end)
-    else
-        local ok, why = pcall(function() W.part.Position = pos end)
-        if not ok then return false, tostring(why) end
-    end
-    W.px, W.pz, W.py = x, z, top
-    return true
-end
-
--- The part is not anchored, so gravity pulls on it: every tick it is put back at its spot with no
--- speed, which is a few hundredths of a stud of sag at most.
-local function pin_floor()
-    if not (W.part and W.px) or W.busy or floor_gone() then return end
-    pcall(function()
-        W.part.Position = Vector3.new(W.px, W.py - FLOOR.thick / 2, W.pz)
-        W.part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-    end)
-end
-
-local function jesus_tick(now)
-    -- the character's parts, looked up again every second (a respawn makes new ones)
-    if now - W.look_t > 1 or not W.root then
-        W.look_t = now
-        local ch = character()
-        W.root = ch and child(ch, "HumanoidRootPart")
-        W.hum = ch and child(ch, "Humanoid")
-    end
-    local root, hum = W.root, W.hum
-    if not (root and hum) then return end
-    local prim = mr("uint64", root + OFFS.prim)
-    if not prim or prim < 0x10000 then W.root = nil; return end
-    local sp = mr("uint64", hum + OFFS.state)
-    local state = sp and sp > 0x10000 and mr("int", sp + OFFS.state_id)
-    local hip = mr("float", hum + OFFS.hip) or 2
-    local x = mr("float", prim + OFFS.pos)
-    local y = mr("float", prim + OFFS.pos + 4)
-    local z = mr("float", prim + OFFS.pos + 8)
-    if not (x and y and z) then return end
-    local swimming = state == ST_SWIMMING
-
-    if swimming then
-        if not W.learned or math.abs(W.water_y - y) > 3 then
-            W.water_y, W.learned = y, true
-            log(string.format("water walk: the water's surface is at y %.1f", y))
-        else
-            W.water_y = W.water_y * 0.9 + y * 0.1
-        end
-    end
-
-    -- the floor follows you (on its own thread: each move waits for a Heartbeat)
-    local far = not W.px or (x - W.px) ^ 2 + (z - W.pz) ^ 2 > FLOOR.follow ^ 2 or math.abs((W.py or 0) - W.water_y) > 0.5
-    if (far or floor_gone()) and not W.busy and now - W.failed_t > 3 then
-        W.busy = true
-        spawn(function()
-            local ok, why = place_floor(x, z)
-            if not ok then
-                W.failed_t = tick()
-                say("ww", "water walk: the floor could not be placed - " .. tostring(why))
-            else
-                say("ww", "water walk: floor under you at y " .. string.format("%.1f", W.water_y))
-            end
-            W.busy = false
-        end)
-    end
-
-    pin_floor()
-
-    -- fallen in: up onto the floor, the fall stopped
-    if swimming and W.px then
-        mw("float", prim + OFFS.pos + 4, W.water_y + hip + 1.3)
-        mw("float", prim + OFFS.vel + 4, 0)
+local function live_scan(first)
+    local added = scan_here()
+    if added > 0 or first then
+        rebuild_live()
+        write_places()
+        log("places: " .. summary() .. (added > 0 and (" (" .. added .. " new)") or ""))
     end
 end
+
 
 -- ---------------------------------------------------------------------------------------------
 -- main loop
@@ -1136,8 +1867,13 @@ local status_t, was_reel = 0, false
 local function step()
     local now = tick()
     if now - status_t >= 5 then status_t = now; write_status() end
-    if S.jesus_on then pcall(jesus_tick, now) elseif W.part and not W.busy then pcall(destroy_floor) end   -- off: the floor goes
-    if S.paused then return end
+    pcall(markers_step, now)
+    pcall(ir_watch, now)
+    pcall(hook_tick, now)
+    -- Auto Fish off: Auto Shake and Auto Reel still work (you cast, they take it from there)
+    local auto = not S.paused
+    if not auto and not (S.shake_on or S.reel_on) then return end
+    if RUN.active then hold(false); return end      -- the chest run is driving
 
     if not foreground() then
         hold(false)
@@ -1153,7 +1889,7 @@ local function step()
 
     if reel_ui then
         was_reel = true
-        if S.reel_on then reel(reel_ui, now) else hold(false); set_state("reel (yours)") end
+        if S.reel_on then reel(reel_ui, now) else hold(false); if auto then set_state("reel (yours)") end end
         return
     end
     if was_reel then
@@ -1166,10 +1902,11 @@ local function step()
         return
     end
     if shake_btn then
-        if S.shake_on then shake(shake_btn, now) else set_state("shake") end
+        if S.shake_on then shake(shake_btn, now) elseif auto then set_state("shake") end
         return
     end
     hold(false)
+    if not auto then return end      -- no casting without Auto Fish
 
     if S.state == "cooldown" and now - S.state_t < CFG.AFTER_CATCH then return end
     if S.state == "shake" then set_state("waiting"); return end   -- shaking done, the reel comes next
@@ -1183,7 +1920,9 @@ end
 local function stop()
     S.running = false
     pcall(hold, false)
-    pcall(destroy_floor)
+    RUN.active = false
+    pcall(EX.ir_stop)
+    for _, m in ipairs(MARKERS) do pcall(m.destroy) end
     pcall(function() Lib:Destroy() end)
 end
 _G.__fisch = { stop = stop, state = S, cfg = CFG, dump = dump }
@@ -1191,8 +1930,13 @@ _G.__fisch = { stop = stop, state = S, cfg = CFG, dump = dump }
 local okp, perr = pcall(build_panel)
 if not okp then log("panel failed to build: " .. tostring(perr)) end
 spawn(function()
-    local ok, err = pcall(live_scan)
+    local ok, err = pcall(live_scan, true)
     if not ok then log("places: the scan failed: " .. tostring(err)) end
+    while S.running do                    -- places stream in as you travel
+        task.wait(30)
+        local ok2, err2 = pcall(live_scan, false)
+        if not ok2 then say("places", "places: the rescan failed: " .. tostring(err2)) end
+    end
 end)
 log("loaded - everything is on the panel, and starts off")
 
@@ -1212,8 +1956,11 @@ spawn(function()
             end
         end
         -- every frame-ish while shaking, reeling or dragging the panel; a calmer pace the rest of the time
-        local busy = S.state == "shake" or S.state == "reel" or held or S.jesus_on
-        task.wait(busy and 0.03 or 0.07)
+        local busy = S.state == "shake" or S.state == "reel" or held
+        -- the markers want the loop at their own rate (they throttle themselves); it never runs faster than one frame
+        local wait_s = busy and 0.03 or 0.07
+        if WP.on or CH.on then wait_s = math.min(wait_s, 1 / math.max(5, EX.esp_hz)) end
+        task.wait(wait_s)
     end
     pcall(hold, false)
     log("stopped")
