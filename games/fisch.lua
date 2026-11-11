@@ -1206,7 +1206,7 @@ local IR = { on = false, reel = false, busy = false, n = 0, combo = 0, orig = {}
 -- Verified live on 2026-11-07 (probe 4): writing 40 there made the reel finish in seconds.
 --
 -- gc.geti / gc.seti cannot read these arrays on this build (they answer nil / "no such index"),
--- so the number is written raw: Luau Table +8 = sizearray, +0x28 = the array; its first TValue is
+-- so the number is written raw: Luau Table +8 = sizearray, +0x18, +0x20 or +0x28 = the array, by build (see ir_ptr); its first TValue is
 -- 16 bytes, the double at +0 and the type tag at +0xC (3 = number). Anything else there (the game
 -- keeps some modifiers as NumberValue Instances) is left alone. The layout is checked against
 -- gc.len first, and nothing is written if it does not match.
@@ -1228,6 +1228,13 @@ end
 
 -- the address of the array's first TValue, when it is a live one-or-more entry array of plain numbers
 -- (nil and the reason otherwise)
+--
+-- Where a Luau Table keeps its array pointer changes with the Roblox build (+0x28 on 5a21b, +0x18 on f0ea5da, +0x20 on 4ea8e854 -
+-- read live on the modifier arrays on 2026-11-11: +0x18 held float data, +0x20 the array, +0x28 the shared empty node). Reading
+-- the old +0x28 there gave "not a number (tag 0)" and the reel went unpatched. So the candidates are tried: the right one points at
+-- TValues whose tag (+0xC) is 3 (number); the others are not a heap pointer, the empty node (tag 0) or something else that is not
+-- a number. The one that worked is tried first the next time.
+local IR_ARR_OFFSETS = { 0x20, 0x18, 0x28 }
 local function ir_ptr(arr)
     -- gc.len is not trusted: probe 6 saw it answer 0 for an array whose raw sizearray was 1 and whose
     -- first entry was a good number (that read as "empty" and the reel went unpatched). gc.len only
@@ -1236,11 +1243,26 @@ local function ir_ptr(arr)
     if not ok or type(len) ~= "number" then return nil, "table gone" end
     local size = ir_rd("int", arr + 8)
     if type(size) ~= "number" or size < 1 or size > 64 then return nil, "empty" end
-    local ptr = ir_rd("uint64", arr + 0x28)
-    if type(ptr) ~= "number" or ptr < 0x10000 then return nil, "no array" end
-    local tag = ir_rd("int", ptr + 0xC)
-    if tag ~= 3 then return nil, "not a number (tag " .. tostring(tag) .. ")" end
-    return ptr
+    local why = "no array"
+    local order = { IR.aoff }
+    for _, off in ipairs(IR_ARR_OFFSETS) do if off ~= IR.aoff then order[#order + 1] = off end end
+    if not IR.aoff then order = IR_ARR_OFFSETS end
+    for _, off in ipairs(order) do
+        local ptr = ir_rd("uint64", arr + off)
+        if type(ptr) == "number" and ptr >= 0x10000 and ptr < 0x7FFFFFFFFFFF then
+            local tag = ir_rd("int", ptr + 0xC)
+            local v = ir_rd("double", ptr)
+            if tag == 3 and type(v) == "number" and v == v and math.abs(v) < 1e9 then
+                if IR.aoff ~= off then
+                    IR.aoff = off
+                    log(string.format("instant reel: the array pointer is at Table +0x%X on this build", off))
+                end
+                return ptr
+            end
+            why = "not a number (tag " .. tostring(tag) .. " at +0x" .. string.format("%X", off) .. ")"
+        end
+    end
+    return nil, why
 end
 
 local function ir_arr_set(arr, want)
